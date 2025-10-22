@@ -1,0 +1,26 @@
+# Environment Variables Template
+# Copy these to Render → Environment tab
+
+# Database Configuration
+# Get this from Render PostgreSQL dashboard (use Internal Database URL)
+DATABASE_URL=postgresql://user:password@host:port/database
+
+# Cloudinary Configuration
+# Get these from cloudinary.com dashboard → Account Details
+CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
+
+# JWT Secret Key
+# Generate with: python -c "import secrets; print(secrets.token_hex(32))"
+JWT_SECRET_KEY=your_secret_key_here_minimum_32_characters_long
+
+# Flask Environment
+FLASK_ENV=production
+
+# Python Version (for Render)
+PYTHON_VERSION=3.11.0
+
+# Port (Render sets this automatically, no need to add)
+# PORT=5000
+

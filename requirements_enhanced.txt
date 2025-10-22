@@ -1,0 +1,28 @@
+# Enhanced liveness detection requirements
+torch>=1.9.0
+torchvision>=0.10.0
+opencv-python>=4.5.0
+face-recognition>=1.3.0
+mediapipe>=0.8.0
+numpy>=1.21.0
+Pillow>=8.0.0
+scipy>=1.7.0
+timm>=0.4.12  # For DINO-pretrained models
+albumentations>=1.0.0  # For advanced data augmentation
+flask>=2.0.0
+pyyaml>=6.0
+
+# Cloud storage and database
+cloudinary>=1.32.0
+psycopg2-binary>=2.9.0
+python-dotenv>=1.0.0
+
+# Optional: for 3D depth sensing (requires compatible hardware)
+# open3d>=0.15.0
+# pyrealsense2>=2.50.0  # For Intel RealSense cameras
+
+# Development dependencies
+pytest>=6.0.0
+black>=25.9.0
+flake8>=3.9.0
+

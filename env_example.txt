@@ -1,0 +1,11 @@
+# Cloudinary Configuration (Get from https://cloudinary.com)
+CLOUDINARY_CLOUD_NAME=de0zo490s
+CLOUDINARY_API_KEY=633699465765386
+CLOUDINARY_API_SECRET=9WNcA2_WBmw2vRrVwnsO-luZVT0
+
+# Render PostgreSQL Database (Get from Render dashboard)
+DATABASE_URL=postgresql://anime_bd_v2_user:ZIe557dNmLtvxogGH6fsZMPO0WiZhsfJ@dpg-d3dt8p3uibrs73ab2k80-a.oregon-postgres.render.com/anime_bd_v2
+
+# Optional: Flask Configuration
+FLASK_ENV=production
+FLASK_DEBUG=False

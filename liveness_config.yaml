@@ -1,0 +1,88 @@
+ensemble:
+  weights:
+    model: 0.35         # FIXED: Increase from 0.25 (model still primary)
+    frequency: 0.25     # FIXED: Increase from 0.20
+    temporal: 0.20      # FIXED: Increase from 0.15 (now works with sessions)
+    blink_pattern: 0.10 # FIXED: Reduce from 0.15 (less reliable alone)
+    static_image: 0.10  # FIXED: Reduce from 0.25 (EXIF limited for uploads)
+  min_signals_required: 4  # FIXED: Require 4 of 5 signals (stricter)
+
+thresholds:
+  liveness: 0.75        # FIXED: Increase from 0.70 (stricter)
+  spectrum: 0.70        # FIXED: Decrease from 0.75 (was too strict)
+  blink_ear: 0.23       # Keep same (was 0.25, revert to original)
+  
+  # NEW: Scenario-specific thresholds
+  single_frame: 0.90    # Near-impossible for static images
+  multi_frame: 0.75     # Normal for video sequences
+
+# NEW: Unified multi-endpoint verification settings
+unified_verification:
+  challenge_threshold: 0.8   # Trigger flash challenge if initial confidence < 0.8
+  weights:
+    sequence: 0.30           # Multi-frame sequence analysis weight
+    enhanced: 0.30           # Enhanced motion analysis weight
+    guided: 0.25             # Guided verification weight
+    challenge: 0.15          # Flash challenge weight (redistributed if not run)
+  adaptive_threshold: 0.75   # Overall weighted score threshold to pass
+  require_identity_match: true  # Must match enrolled face
+
+# NEW: Frame quality thresholds
+quality:
+  blur_threshold: 100.0        # Laplacian variance threshold (lower = more blurry)
+  min_brightness: 40           # Minimum acceptable brightness (0-255)
+  max_brightness: 220          # Maximum acceptable brightness (0-255)
+  target_brightness: 128       # Target brightness for normalization
+  min_face_size: 80            # Minimum face size in pixels
+  max_faces_allowed: 1         # Maximum number of faces (reject if exceeded)
+  min_quality_score: 60.0      # Minimum quality score to accept frame (0-100)
+
+# NEW: Performance and capture settings
+performance:
+  capture_fps: 10              # Frames per second for video capture
+  frame_count: 8               # Number of frames to capture per sequence
+  frame_delay_ms: 100          # Delay between frame captures (milliseconds)
+  use_threading: true          # Enable async/threading for better performance
+  max_processing_time: 5.0     # Max seconds for processing (timeout)
+  
+# NEW: Guided verification settings
+guided:
+  quality_check_interval_ms: 200  # How often to check quality in real-time (ms)
+  instruction_display_time: 2000  # How long to show instructions (ms)
+  auto_capture_on_green: true     # Auto-capture when quality is good
+  require_blink: true             # Require at least 1 blink
+  require_head_movement: false    # Require head movement (optional)
+  challenge_probability: 0.3      # Probability of adding random challenge (0-1)
+
+# NEW: Logging and security
+logging:
+  log_all_attempts: true          # Log every verification attempt
+  log_failed_attempts: true       # Detailed logging for failures
+  log_suspicious_activity: true   # Flag and log suspicious patterns
+  log_path: "logs/verification.log"
+  retention_days: 30              # How long to keep logs
+
+profiles:
+  default:
+    model_type: ensemble
+  low_light:
+    liveness: 0.60
+    quality:
+      min_brightness: 20
+      target_brightness: 100
+  mobile_cpu:
+    model_type: cnn
+    liveness: 0.58
+    performance:
+      capture_fps: 8
+      frame_count: 5
+  high_security:
+    liveness: 0.85
+    quality:
+      blur_threshold: 150.0
+      min_quality_score: 70.0
+    guided:
+      require_blink: true
+      require_head_movement: true
+      challenge_probability: 0.7
+
