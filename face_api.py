@@ -806,9 +806,21 @@ def create_challenge():
         data = request.get_json() or {}
         session_id = data.get("session_id") or (token_urlsafe(16) if token_urlsafe else f"sess_{int(time.time())}")
         num_challenges = data.get("num_challenges")
+        username = data.get("username", "").strip()
     else:
         session_id = request.form.get("session_id") or (token_urlsafe(16) if token_urlsafe else f"sess_{int(time.time())}")
         num_challenges = request.form.get("num_challenges")
+        username = request.form.get("username", "").strip()
+    
+    # Check if user should skip challenges
+    if username and db_manager.get_user_skip_challenges(username):
+        print(f"[+] User {username} configured to skip challenges - returning empty challenge list")
+        return jsonify({
+            "challenges": [],
+            "session_id": session_id,
+            "skip_challenges": True,
+            "message": "Challenge skipping enabled for this user"
+        })
     
     # If num_challenges is provided, create a sequence
     if num_challenges:
