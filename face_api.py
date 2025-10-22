@@ -291,6 +291,46 @@ def toggle_user_status(username):
     }), 200
 
 
+@app.route("/admin/users/<username>/skip-challenges", methods=["PATCH"])
+@admin_required
+def toggle_user_skip_challenges(username):
+    """Toggle user challenge skipping (admin only)"""
+    data = request.get_json() or {}
+    skip_challenges = data.get('skip_challenges')
+
+    if skip_challenges is None:
+        return jsonify({"error": "skip_challenges field required"}), 400
+
+    # Check if user exists
+    user = db_manager.get_auth_user(username)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    # Update challenge skipping setting
+    success = db_manager.set_user_skip_challenges(username, skip_challenges)
+
+    if not success:
+        return jsonify({"error": "Failed to update user challenge settings"}), 500
+
+    # Return updated user info
+    updated_user = db_manager.get_auth_user(username)
+    action = "enabled" if skip_challenges else "disabled"
+
+    return jsonify({
+        "message": f"Challenge skipping {action} for user {username}",
+        "user": {
+            "id": updated_user['username'],
+            "username": updated_user['username'],
+            "display_name": updated_user.get('display_name', updated_user['username']),
+            "role": updated_user['role'],
+            "allowed": updated_user['allowed'],
+            "skip_challenges": updated_user['skip_challenges'],
+            "created_at": updated_user['created_at'].isoformat() if updated_user.get('created_at') else None,
+            "last_login": updated_user['last_login'].isoformat() if updated_user.get('last_login') else None
+        }
+    }), 200
+
+
 # ========================================
 # Face Recognition Endpoints (Protected)
 # ========================================
@@ -1391,57 +1431,65 @@ def verify_unified():
     challenge_result = None
     challenge_ran = False
 
-    # Check if challenges were provided in the request
-    # Handle both direct list and indexed format
-    challenge_ids = request.form.getlist("challenge_ids")
-    if not challenge_ids:
-        # Try indexed format: challenge_ids[0], challenge_ids[1], etc.
-        challenge_ids = []
-        index = 0
-        while True:
-            key = f"challenge_ids[{index}]"
-            value = request.form.get(key)
-            if value is None:
-                break
-            challenge_ids.append(value)
-            index += 1
-    if challenge_ids:
-        challenge_ran = True
-        challenge_scores = []
+    # Check if user should skip challenges
+    user_should_skip = db_manager.get_user_skip_challenges(username)
+    if user_should_skip:
+        print(f"[+] User {username} configured to skip challenges")
+        challenge_result = {"score": 1.0, "skipped": True, "reason": "user_exempt"}
+        challenge_ran = False  # Mark as not run, but give full score
+    else:
+        # Check if challenges were provided in the request
+        # Handle both direct list and indexed format
+        challenge_ids = request.form.getlist("challenge_ids")
+        if not challenge_ids:
+            # Try indexed format: challenge_ids[0], challenge_ids[1], etc.
+            challenge_ids = []
+            index = 0
+            while True:
+                key = f"challenge_ids[{index}]"
+                value = request.form.get(key)
+                if value is None:
+                    break
+                challenge_ids.append(value)
+                index += 1
 
-        # Get session detectors for enhanced verification
-        session_detectors = get_or_create_session_detectors(session_id)
+            if challenge_ids:
+                challenge_ran = True
+                challenge_scores = []
 
-        # Verify each challenge individually
-        for i, challenge_id in enumerate(challenge_ids):
-            try:
-                # Extract frames for this specific challenge (divide frames among challenges)
-                frames_per_challenge = max(3, len(frames) // len(challenge_ids))
-                start_idx = i * frames_per_challenge
-                end_idx = min(start_idx + frames_per_challenge, len(frames))
-                challenge_frames = frames[start_idx:end_idx]
+                # Get session detectors for enhanced verification
+                session_detectors = get_or_create_session_detectors(session_id)
 
-                # Verify the challenge
-                verification_result = challenge_manager.verify_challenge(challenge_id, challenge_frames)
-                score = 1.0 if verification_result.get("success", False) else 0.0
-                challenge_scores.append(score)
+                # Verify each challenge individually
+                for i, challenge_id in enumerate(challenge_ids):
+                    try:
+                        # Extract frames for this specific challenge (divide frames among challenges)
+                        frames_per_challenge = max(3, len(frames) // len(challenge_ids))
+                        start_idx = i * frames_per_challenge
+                        end_idx = min(start_idx + frames_per_challenge, len(frames))
+                        challenge_frames = frames[start_idx:end_idx]
 
-                print(f"[+] Challenge {challenge_id}: {verification_result}")
+                        # Verify the challenge
+                        verification_result = challenge_manager.verify_challenge(challenge_id, challenge_frames)
+                        score = 1.0 if verification_result.get("success", False) else 0.0
+                        challenge_scores.append(score)
 
-            except Exception as e:
-                print(f"[!] Challenge verification failed for {challenge_id}: {e}")
-                challenge_scores.append(0.0)  # Failed challenge = 0 score
+                        print(f"[+] Challenge {challenge_id}: {verification_result}")
 
-        # Calculate average challenge score
-        avg_challenge_score = np.mean(challenge_scores) if challenge_scores else 0.0
-        challenge_result = {
-            "score": float(avg_challenge_score),
-            "challenges_verified": len(challenge_scores),
-            "challenges_passed": sum(1 for s in challenge_scores if s > 0.5)
-        }
+                    except Exception as e:
+                        print(f"[!] Challenge verification failed for {challenge_id}: {e}")
+                        challenge_scores.append(0.0)  # Failed challenge = 0 score
 
-        print(f"[+] Challenge verification complete: {challenge_result}")
-    elif quick_score < challenge_threshold:
+                # Calculate average challenge score
+                avg_challenge_score = np.mean(challenge_scores) if challenge_scores else 0.0
+                challenge_result = {
+                    "score": float(avg_challenge_score),
+                    "challenges_verified": len(challenge_scores),
+                    "challenges_passed": sum(1 for s in challenge_scores if s > 0.5)
+                }
+
+                print(f"[+] Challenge verification complete: {challenge_result}")
+        elif quick_score < challenge_threshold:
         # Fallback: trigger single challenge if score is low (legacy behavior)
         challenge_ran = True
         challenge_result = {"score": 0.5, "triggered": True, "fallback": True}

@@ -36,6 +36,7 @@ class DatabaseManager:
                         role VARCHAR(20) DEFAULT 'user' NOT NULL,
                         allowed BOOLEAN DEFAULT TRUE NOT NULL,
                         display_name VARCHAR(100),
+                        skip_challenges BOOLEAN DEFAULT FALSE NOT NULL,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
                         last_login TIMESTAMP
                     );
@@ -97,51 +98,51 @@ class DatabaseManager:
                 # Migration: Remove old auth columns from users table if they exist
                 # (password_hash, role, allowed, display_name, created_at, last_login)
                 cursor.execute("""
-                    DO $$ 
+                    DO $$
                     BEGIN
                         -- Drop password_hash column if it exists
                         IF EXISTS (
-                            SELECT 1 FROM information_schema.columns 
+                            SELECT 1 FROM information_schema.columns
                             WHERE table_name='users' AND column_name='password_hash'
                         ) THEN
                             ALTER TABLE users DROP COLUMN password_hash;
                         END IF;
-                        
+
                         -- Drop role column if it exists
                         IF EXISTS (
-                            SELECT 1 FROM information_schema.columns 
+                            SELECT 1 FROM information_schema.columns
                             WHERE table_name='users' AND column_name='role'
                         ) THEN
                             ALTER TABLE users DROP COLUMN role;
                         END IF;
-                        
+
                         -- Drop allowed column if it exists
                         IF EXISTS (
-                            SELECT 1 FROM information_schema.columns 
+                            SELECT 1 FROM information_schema.columns
                             WHERE table_name='users' AND column_name='allowed'
                         ) THEN
                             ALTER TABLE users DROP COLUMN allowed;
                         END IF;
-                        
+
                         -- Drop display_name column if it exists
                         IF EXISTS (
-                            SELECT 1 FROM information_schema.columns 
+                            SELECT 1 FROM information_schema.columns
                             WHERE table_name='users' AND column_name='display_name'
                         ) THEN
                             ALTER TABLE users DROP COLUMN display_name;
                         END IF;
-                        
+
                         -- Drop created_at column if it exists
                         IF EXISTS (
-                            SELECT 1 FROM information_schema.columns 
+                            SELECT 1 FROM information_schema.columns
                             WHERE table_name='users' AND column_name='created_at'
                         ) THEN
                             ALTER TABLE users DROP COLUMN created_at;
                         END IF;
-                        
+
                         -- Drop last_login column if it exists
                         IF EXISTS (
-                            SELECT 1 FROM information_schema.columns 
+                            SELECT 1 FROM information_schema.columns
                             WHERE table_name='users' AND column_name='last_login'
                         ) THEN
                             ALTER TABLE users DROP COLUMN last_login;
@@ -149,9 +150,22 @@ class DatabaseManager:
                     END $$;
                 """)
 
+                # Migration: Add skip_challenges column to auth_users if it doesn't exist
+                cursor.execute("""
+                    DO $$
+                    BEGIN
+                        IF NOT EXISTS (
+                            SELECT 1 FROM information_schema.columns
+                            WHERE table_name='auth_users' AND column_name='skip_challenges'
+                        ) THEN
+                            ALTER TABLE auth_users ADD COLUMN skip_challenges BOOLEAN DEFAULT FALSE NOT NULL;
+                        END IF;
+                    END $$;
+                """)
+
                 self.connection.commit()
                 print("[+] Database tables created successfully")
-                print("[+] Applied migrations: face_count, last_verified, removed legacy auth columns")
+                print("[+] Applied migrations: face_count, last_verified, skip_challenges, removed legacy auth columns")
 
         except Exception as e:
             print(f"[!] Failed to create tables: {e}")
@@ -315,12 +329,12 @@ class DatabaseManager:
         try:
             with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
                 cursor.execute("""
-                    SELECT username, password_hash, role, allowed, display_name, 
-                           created_at, last_login
+                    SELECT username, password_hash, role, allowed, display_name,
+                           skip_challenges, created_at, last_login
                     FROM auth_users
                     WHERE username = %s;
                 """, (username,))
-                
+
                 result = cursor.fetchone()
                 return dict(result) if result else None
 
@@ -393,7 +407,7 @@ class DatabaseManager:
         try:
             with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
                 cursor.execute("""
-                    SELECT username, role, allowed, display_name, created_at, last_login
+                    SELECT username, role, allowed, display_name, skip_challenges, created_at, last_login
                     FROM auth_users
                     ORDER BY created_at DESC;
                 """)
@@ -403,6 +417,45 @@ class DatabaseManager:
         except Exception as e:
             print(f"[!] Failed to get all auth users: {e}")
             return []
+
+    def set_user_skip_challenges(self, username: str, skip_challenges: bool) -> bool:
+        """Set user skip_challenges flag"""
+        if not self.connection:
+            return False
+
+        try:
+            with self.connection.cursor() as cursor:
+                cursor.execute("""
+                    UPDATE auth_users
+                    SET skip_challenges = %s
+                    WHERE username = %s;
+                """, (skip_challenges, username))
+                self.connection.commit()
+                status = "enabled" if skip_challenges else "disabled"
+                print(f"[+] Challenge skipping {status} for user '{username}'")
+                return True
+
+        except Exception as e:
+            print(f"[!] Failed to update user challenge settings: {e}")
+            self.connection.rollback()
+            return False
+
+    def get_user_skip_challenges(self, username: str) -> bool:
+        """Check if user should skip challenges"""
+        if not self.connection:
+            return False
+
+        try:
+            with self.connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT skip_challenges FROM auth_users WHERE username = %s;
+                """, (username,))
+                result = cursor.fetchone()
+                return result[0] if result else False
+
+        except Exception as e:
+            print(f"[!] Failed to check user challenge settings: {e}")
+            return False
 
     def close(self):
         """Close database connection"""
