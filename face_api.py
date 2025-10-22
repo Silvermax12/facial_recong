@@ -1453,46 +1453,46 @@ def verify_unified():
                 challenge_ids.append(value)
                 index += 1
 
-            if challenge_ids:
-                challenge_ran = True
-                challenge_scores = []
+        if challenge_ids:
+            challenge_ran = True
+            challenge_scores = []
 
-                # Get session detectors for enhanced verification
-                session_detectors = get_or_create_session_detectors(session_id)
+            # Get session detectors for enhanced verification
+            session_detectors = get_or_create_session_detectors(session_id)
 
-                # Verify each challenge individually
-                for i, challenge_id in enumerate(challenge_ids):
-                    try:
-                        # Extract frames for this specific challenge (divide frames among challenges)
-                        frames_per_challenge = max(3, len(frames) // len(challenge_ids))
-                        start_idx = i * frames_per_challenge
-                        end_idx = min(start_idx + frames_per_challenge, len(frames))
-                        challenge_frames = frames[start_idx:end_idx]
+            # Verify each challenge individually
+            for i, challenge_id in enumerate(challenge_ids):
+                try:
+                    # Extract frames for this specific challenge (divide frames among challenges)
+                    frames_per_challenge = max(3, len(frames) // len(challenge_ids))
+                    start_idx = i * frames_per_challenge
+                    end_idx = min(start_idx + frames_per_challenge, len(frames))
+                    challenge_frames = frames[start_idx:end_idx]
 
-                        # Verify the challenge
-                        verification_result = challenge_manager.verify_challenge(challenge_id, challenge_frames)
-                        score = 1.0 if verification_result.get("success", False) else 0.0
-                        challenge_scores.append(score)
+                    # Verify the challenge
+                    verification_result = challenge_manager.verify_challenge(challenge_id, challenge_frames)
+                    score = 1.0 if verification_result.get("success", False) else 0.0
+                    challenge_scores.append(score)
 
-                        print(f"[+] Challenge {challenge_id}: {verification_result}")
+                    print(f"[+] Challenge {challenge_id}: {verification_result}")
 
-                    except Exception as e:
-                        print(f"[!] Challenge verification failed for {challenge_id}: {e}")
-                        challenge_scores.append(0.0)  # Failed challenge = 0 score
+                except Exception as e:
+                    print(f"[!] Challenge verification failed for {challenge_id}: {e}")
+                    challenge_scores.append(0.0)  # Failed challenge = 0 score
 
-                # Calculate average challenge score
-                avg_challenge_score = np.mean(challenge_scores) if challenge_scores else 0.0
-                challenge_result = {
-                    "score": float(avg_challenge_score),
-                    "challenges_verified": len(challenge_scores),
-                    "challenges_passed": sum(1 for s in challenge_scores if s > 0.5)
-                }
+            # Calculate average challenge score
+            avg_challenge_score = np.mean(challenge_scores) if challenge_scores else 0.0
+            challenge_result = {
+                "score": float(avg_challenge_score),
+                "challenges_verified": len(challenge_scores),
+                "challenges_passed": sum(1 for s in challenge_scores if s > 0.5)
+            }
 
-                print(f"[+] Challenge verification complete: {challenge_result}")
+            print(f"[+] Challenge verification complete: {challenge_result}")
         elif quick_score < challenge_threshold:
-        # Fallback: trigger single challenge if score is low (legacy behavior)
-        challenge_ran = True
-        challenge_result = {"score": 0.5, "triggered": True, "fallback": True}
+            # Fallback: trigger single challenge if score is low (legacy behavior)
+            challenge_ran = True
+            challenge_result = {"score": 0.5, "triggered": True, "fallback": True}
     
     # Step 3: Verify identity on first frame
     rgb = cv2.cvtColor(frames[0], cv2.COLOR_BGR2RGB)
