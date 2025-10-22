@@ -56,7 +56,7 @@ known_faces/
 uploads/
 temp/
 
-# Embedded git repositories
+    # Embedded git repositories
 Face-Anti-Spoofing-using-DeePixBiS/
 
 # Virtual environment
