@@ -7,27 +7,48 @@ import json
 
 class DatabaseManager:
     def __init__(self):
-        # Render PostgreSQL connection
+        # Render PostgreSQL connection string
         self.connection_string = os.getenv('DATABASE_URL')
         if not self.connection_string:
             print("[!] DATABASE_URL not found in environment variables")
             self.connection = None
         else:
+            print("[+] Database configured - connections will be created on-demand")
+            self.connection = None  # Don't keep persistent connection
+            self.create_tables()
+
+    def _get_connection(self):
+        """Get a fresh database connection"""
+        if not self.connection_string:
+            return None
+
+        try:
+            # Create new connection each time (better for serverless/cloud)
+            conn = psycopg2.connect(self.connection_string)
+            return conn
+        except Exception as e:
+            print(f"[!] Database connection failed: {e}")
+            return None
+
+    def _close_connection(self, conn):
+        """Close a database connection"""
+        if conn:
             try:
-                self.connection = psycopg2.connect(self.connection_string)
-                print("[+] Connected to Render PostgreSQL database")
-                self.create_tables()
-            except Exception as e:
-                print(f"[!] Database connection failed: {e}")
-                self.connection = None
+                conn.close()
+            except:
+                pass
 
     def create_tables(self):
         """Create necessary tables if they don't exist"""
-        if not self.connection:
+        if not self.connection_string:
+            return
+
+        conn = self._get_connection()
+        if not conn:
             return
 
         try:
-            with self.connection.cursor() as cursor:
+            with conn.cursor() as cursor:
                 # Auth users table (for authentication)
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS auth_users (
@@ -163,23 +184,26 @@ class DatabaseManager:
                     END $$;
                 """)
 
-                self.connection.commit()
+                conn.commit()
                 print("[+] Database tables created successfully")
                 print("[+] Applied migrations: face_count, last_verified, skip_challenges, removed legacy auth columns")
 
         except Exception as e:
             print(f"[!] Failed to create tables: {e}")
-            self.connection.rollback()
+            conn.rollback()
+        finally:
+            self._close_connection(conn)
 
     def enroll_user(self, username: str, face_encodings: List[np.ndarray],
                    cloudinary_urls: List[str]) -> bool:
         """Enroll a user with their face encodings and photo URLs"""
-        if not self.connection:
+        conn = self._get_connection()
+        if not conn:
             print("[!] No database connection")
             return False
 
         try:
-            with self.connection.cursor() as cursor:
+            with conn.cursor() as cursor:
                 # Insert or update user
                 cursor.execute("""
                     INSERT INTO users (username, face_count)
@@ -198,22 +222,25 @@ class DatabaseManager:
                         VALUES (%s, %s, %s);
                     """, (username, encoding_list, url))
 
-                self.connection.commit()
+                conn.commit()
                 print(f"[+] Enrolled user '{username}' with {len(face_encodings)} faces")
                 return True
 
         except Exception as e:
             print(f"[!] Enrollment failed: {e}")
-            self.connection.rollback()
+            conn.rollback()
             return False
+        finally:
+            self._close_connection(conn)
 
     def get_user_encodings(self, username: str) -> List[Tuple[np.ndarray, str]]:
         """Get all face encodings and URLs for a user"""
-        if not self.connection:
+        conn = self._get_connection()
+        if not conn:
             return []
 
         try:
-            with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                 cursor.execute("""
                     SELECT encoding_vector, cloudinary_url
                     FROM face_encodings
@@ -235,14 +262,17 @@ class DatabaseManager:
         except Exception as e:
             print(f"[!] Failed to get user encodings: {e}")
             return []
+        finally:
+            self._close_connection(conn)
 
     def get_all_users(self) -> List[str]:
         """Get list of all enrolled users"""
-        if not self.connection:
+        conn = self._get_connection()
+        if not conn:
             return []
 
         try:
-            with self.connection.cursor() as cursor:
+            with conn.cursor() as cursor:
                 cursor.execute("SELECT username FROM users ORDER BY enrolled_at;")
                 results = cursor.fetchall()
                 return [row[0] for row in results]
@@ -250,32 +280,38 @@ class DatabaseManager:
         except Exception as e:
             print(f"[!] Failed to get users: {e}")
             return []
+        finally:
+            self._close_connection(conn)
 
     def update_last_verified(self, username: str):
         """Update the last verified timestamp for a user"""
-        if not self.connection:
+        conn = self._get_connection()
+        if not conn:
             return
 
         try:
-            with self.connection.cursor() as cursor:
+            with conn.cursor() as cursor:
                 cursor.execute("""
                     UPDATE users
                     SET last_verified = CURRENT_TIMESTAMP
                     WHERE username = %s;
                 """, (username,))
-                self.connection.commit()
+                conn.commit()
 
         except Exception as e:
             print(f"[!] Failed to update last verified: {e}")
-            self.connection.rollback()
+            conn.rollback()
+        finally:
+            self._close_connection(conn)
 
     def get_user_stats(self, username: str) -> dict:
         """Get statistics for a user"""
-        if not self.connection:
+        conn = self._get_connection()
+        if not conn:
             return {}
 
         try:
-            with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                 cursor.execute("""
                     SELECT u.username, u.enrolled_at, u.face_count, u.last_verified,
                            COUNT(fe.id) as current_faces
@@ -291,43 +327,49 @@ class DatabaseManager:
         except Exception as e:
             print(f"[!] Failed to get user stats: {e}")
             return {}
+        finally:
+            self._close_connection(conn)
 
     # ========================================
     # Authentication Methods
     # ========================================
 
-    def create_auth_user(self, username: str, password_hash: str, role: str = 'user', 
+    def create_auth_user(self, username: str, password_hash: str, role: str = 'user',
                         display_name: Optional[str] = None) -> bool:
         """Create a new auth user"""
-        if not self.connection:
+        conn = self._get_connection()
+        if not conn:
             return False
 
         try:
-            with self.connection.cursor() as cursor:
+            with conn.cursor() as cursor:
                 cursor.execute("""
                     INSERT INTO auth_users (username, password_hash, role, display_name, allowed)
                     VALUES (%s, %s, %s, %s, TRUE)
                 """, (username, password_hash, role, display_name or username))
-                self.connection.commit()
+                conn.commit()
                 print(f"[+] Created auth user '{username}' with role '{role}'")
                 return True
 
         except psycopg2.IntegrityError:
             print(f"[!] User '{username}' already exists")
-            self.connection.rollback()
+            conn.rollback()
             return False
         except Exception as e:
             print(f"[!] Failed to create auth user: {e}")
-            self.connection.rollback()
+            conn.rollback()
             return False
+        finally:
+            self._close_connection(conn)
 
     def get_auth_user(self, username: str) -> Optional[dict]:
         """Get auth user by username"""
-        if not self.connection:
+        conn = self._get_connection()
+        if not conn:
             return None
 
         try:
-            with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                 cursor.execute("""
                     SELECT username, password_hash, role, allowed, display_name,
                            skip_challenges, created_at, last_login
@@ -341,32 +383,38 @@ class DatabaseManager:
         except Exception as e:
             print(f"[!] Failed to get auth user: {e}")
             return None
+        finally:
+            self._close_connection(conn)
 
     def update_last_login(self, username: str):
         """Update last login timestamp"""
-        if not self.connection:
+        conn = self._get_connection()
+        if not conn:
             return
 
         try:
-            with self.connection.cursor() as cursor:
+            with conn.cursor() as cursor:
                 cursor.execute("""
                     UPDATE auth_users
                     SET last_login = CURRENT_TIMESTAMP
                     WHERE username = %s;
                 """, (username,))
-                self.connection.commit()
+                conn.commit()
 
         except Exception as e:
             print(f"[!] Failed to update last login: {e}")
-            self.connection.rollback()
+            conn.rollback()
+        finally:
+            self._close_connection(conn)
 
     def is_user_allowed(self, username: str) -> bool:
         """Check if user is allowed (not blocked)"""
-        if not self.connection:
+        conn = self._get_connection()
+        if not conn:
             return False
 
         try:
-            with self.connection.cursor() as cursor:
+            with conn.cursor() as cursor:
                 cursor.execute("""
                     SELECT allowed FROM auth_users WHERE username = %s;
                 """, (username,))
@@ -376,36 +424,42 @@ class DatabaseManager:
         except Exception as e:
             print(f"[!] Failed to check user status: {e}")
             return False
+        finally:
+            self._close_connection(conn)
 
     def set_user_allowed(self, username: str, allowed: bool) -> bool:
         """Set user allowed status (block/unblock)"""
-        if not self.connection:
+        conn = self._get_connection()
+        if not conn:
             return False
 
         try:
-            with self.connection.cursor() as cursor:
+            with conn.cursor() as cursor:
                 cursor.execute("""
                     UPDATE auth_users
                     SET allowed = %s
                     WHERE username = %s;
                 """, (allowed, username))
-                self.connection.commit()
+                conn.commit()
                 status = "allowed" if allowed else "blocked"
                 print(f"[+] User '{username}' {status}")
                 return True
 
         except Exception as e:
             print(f"[!] Failed to update user status: {e}")
-            self.connection.rollback()
+            conn.rollback()
             return False
+        finally:
+            self._close_connection(conn)
 
     def get_all_auth_users(self) -> List[dict]:
         """Get all auth users (for admin dashboard)"""
-        if not self.connection:
+        conn = self._get_connection()
+        if not conn:
             return []
 
         try:
-            with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                 cursor.execute("""
                     SELECT username, role, allowed, display_name, skip_challenges, created_at, last_login
                     FROM auth_users
@@ -417,36 +471,42 @@ class DatabaseManager:
         except Exception as e:
             print(f"[!] Failed to get all auth users: {e}")
             return []
+        finally:
+            self._close_connection(conn)
 
     def set_user_skip_challenges(self, username: str, skip_challenges: bool) -> bool:
         """Set user skip_challenges flag"""
-        if not self.connection:
+        conn = self._get_connection()
+        if not conn:
             return False
 
         try:
-            with self.connection.cursor() as cursor:
+            with conn.cursor() as cursor:
                 cursor.execute("""
                     UPDATE auth_users
                     SET skip_challenges = %s
                     WHERE username = %s;
                 """, (skip_challenges, username))
-                self.connection.commit()
+                conn.commit()
                 status = "enabled" if skip_challenges else "disabled"
                 print(f"[+] Challenge skipping {status} for user '{username}'")
                 return True
 
         except Exception as e:
             print(f"[!] Failed to update user challenge settings: {e}")
-            self.connection.rollback()
+            conn.rollback()
             return False
+        finally:
+            self._close_connection(conn)
 
     def get_user_skip_challenges(self, username: str) -> bool:
         """Check if user should skip challenges"""
-        if not self.connection:
+        conn = self._get_connection()
+        if not conn:
             return False
 
         try:
-            with self.connection.cursor() as cursor:
+            with conn.cursor() as cursor:
                 cursor.execute("""
                     SELECT skip_challenges FROM auth_users WHERE username = %s;
                 """, (username,))
@@ -456,12 +516,12 @@ class DatabaseManager:
         except Exception as e:
             print(f"[!] Failed to check user challenge settings: {e}")
             return False
+        finally:
+            self._close_connection(conn)
 
     def close(self):
-        """Close database connection"""
-        if self.connection:
-            self.connection.close()
-            print("[+] Database connection closed")
+        """Close database connection (no persistent connection to close)"""
+        print("[+] Database manager closed (no persistent connections)")
 
 # Global database manager instance
 db_manager = DatabaseManager()
