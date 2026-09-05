@@ -8,7 +8,7 @@
 [![CDN](https://img.shields.io/badge/Storage-Cloudinary_CDN-blueviolet.svg)](https://cloudinary.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-An enterprise-grade biometric identity verification and Presentation Attack Detection (PAD) platform. Designed for production cloud deployments (Render, AWS) and seamless integration with Flutter mobile applications and web clients.
+An biometric identity verification and Presentation Attack Detection (PAD) platform. Designed for testing cloud deployments (Render, AWS) and seamless integration with Flutter mobile applications and web clients.
 
 ---
 
@@ -183,6 +183,3 @@ This repository is optimized for deployment on **Render**:
 For a detailed walkthrough, refer to **[docs/09_deployment_and_devops.md](docs/09_deployment_and_devops.md)**.
 
 ---
-
-## 📄 License
-This project is licensed under the MIT License.
