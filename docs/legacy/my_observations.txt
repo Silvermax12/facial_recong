@@ -1,6 +1,6 @@
-## 🔍 Critical Analysis
+##  Critical Analysis
 
-### 🧠 1. Assumptions
+###  1. Assumptions
 
 You assume:
 
